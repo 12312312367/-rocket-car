@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Rocket Car Arena</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#10131a;font-family:system-ui;color:white}
+canvas{display:block;width:100vw;height:100vh}
+#hint{position:fixed;left:12px;top:10px;background:#0009;padding:8px 12px;border-radius:10px;font-size:13px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hint">Xbox: RT acelerar • LT ré • A pular • B boost • X freio • analógico/direcional mover</div>
+<script>
+const c=document.getElementById('c'),x=c.getContext('2d');
+function resize(){c.width=innerWidth*devicePixelRatio;c.height=innerHeight*devicePixelRatio;x.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0)}resize();addEventListener('resize',resize);
+
+let car={x:innerWidth/2,y:innerHeight*.72,a:-Math.PI/2,vx:0,vy:0,boost:100,onGround:true,jumps:2};
+let ball={x:innerWidth/2,y:innerHeight*.38,vx:0,vy:0,r:24};
+let score=[0,0],keys={};
+addEventListener('keydown',e=>{keys[e.code]=1;if(e.code==='Space'&&car.jumps>0){car.vy-=7;car.jumps--;car.onGround=false}if(e.code==='KeyB')car.boost=100});
+addEventListener('keyup',e=>keys[e.code]=0);
+
+function gp(){
+ let g=navigator.getGamepads?.()[0]; if(!g)return;
+ let ax=g.axes[0]||0, ay=g.axes[1]||0;
+ if(Math.abs(ax)>.15) car.a+=ax*.065;
+ let throttle=(g.buttons[7]?.value||0)-(g.buttons[6]?.value||0);
+ if(throttle>.05) keys.RT=1; else delete keys.RT;
+ if(g.buttons[0]?.pressed && !keys._a){keys._a=1;if(car.jumps>0){car.vy-=7;car.jumps--;car.onGround=false}} 
+ if(!g.buttons[0]?.pressed)delete keys._a;
+ if(g.buttons[1]?.pressed)keys.B=1;else delete keys.B;
+ if(g.buttons[2]?.pressed)keys.X=1;else delete keys.X;
+}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function reset(){car={x:innerWidth/2,y:innerHeight*.72,a:-Math.PI/2,vx:0,vy:0,boost:100,onGround:true,jumps:2};ball={x:innerWidth/2,y:innerHeight*.38,vx:0,vy:0,r:24}}
+function tick(){
+ gp(); let W=innerWidth,H=innerHeight;
+ let steer=(keys.ArrowLeft||keys.KeyA?-1:0)+(keys.ArrowRight||keys.KeyD?1:0);
+ if(steer)car.a+=steer*.065;
+ let gas=(keys.ArrowUp||keys.KeyW||keys.RT)?1:0;
+ let rev=(keys.ArrowDown||keys.KeyS||keys.LT)?1:0;
+ let acc=gas*0.42-rev*0.24;
+ if(keys.B&&car.boost>0){acc+=.8;car.boost-=.9}
+ if(keys.X){car.vx*=.96;car.vy*=.96}
+ car.vx+=Math.cos(car.a)*acc;car.vy+=Math.sin(car.a)*acc;
+ car.vx*=.985;car.vy*=.985;
+ car.x+=car.vx;car.y+=car.vy;
+ if(car.x<55||car.x>W-55){car.x=clamp(car.x,55,W-55);car.vx*=-.65}
+ if(car.y<75||car.y>H-75){car.y=clamp(car.y,75,H-75);car.vy*=-.65}
+ if(car.y>H*.73){car.onGround=true;car.jumps=2}
+ ball.vy+=.10;ball.x+=ball.vx;ball.y+=ball.vy;ball.vx*=.996;ball.vy*=.996;
+ if(ball.x<40||ball.x>W-40){ball.x=clamp(ball.x,40,W-40);ball.vx*=-.85}
+ if(ball.y<60){ball.y=60;ball.vy*=-.85}
+ let dx=ball.x-car.x,dy=ball.y-car.y,d=Math.hypot(dx,dy),min=ball.r+23;
+ if(d<min){let nx=dx/d||0,ny=dy/d||-1;let rel=(car.vx*nx+car.vy*ny);ball.vx+=nx*(Math.abs(rel)+3);ball.vy+=ny*(Math.abs(rel)+3);ball.x=car.x+nx*min;ball.y=car.y+ny*min}
+ if(ball.y<25){score[0]++;reset()} if(ball.y>H-25){score[1]++;reset()}
+ draw(W,H);requestAnimationFrame(tick)
+}
+function draw(W,H){
+ x.clearRect(0,0,W,H);x.fillStyle='#176b38';x.fillRect(0,0,W,H);
+ x.strokeStyle='#ffffffaa';x.lineWidth=3;x.strokeRect(40,60,W-80,H-120);
+ x.beginPath();x.moveTo(W/2,60);x.lineTo(W/2,H-60);x.stroke();x.beginPath();x.arc(W/2,H/2,70,0,7);x.stroke();
+ x.fillStyle='#ffffff';x.font='bold 30px system-ui';x.textAlign='center';x.fillText(`${score[0]}   -   ${score[1]}`,W/2,45);
+ // goals
+ x.fillStyle='#e44';x.fillRect(W/2-90,60,180,12);x.fillStyle='#4af';x.fillRect(W/2-90,H-72,180,12);
+ // ball
+ x.beginPath();x.fillStyle='#eee';x.arc(ball.x,ball.y,ball.r,0,7);x.fill();x.strokeStyle='#222';x.stroke();
+ // car
+ x.save();x.translate(car.x,car.y);x.rotate(car.a);x.fillStyle='#e83b45';x.fillRect(-25,-15,50,30);x.fillStyle='#222';x.fillRect(2,-11,18,22);x.fillStyle='#111';x.fillRect(-19,-18,10,5);x.fillRect(-19,13,10,5);x.fillRect(10,-18,10,5);x.fillRect(10,13,10,5);x.restore();
+ x.fillStyle='#0009';x.fillRect(15,H-38,160,12);x.fillStyle='#ffcf33';x.fillRect(15,H-38,160*(car.boost/100),12);
+}
+tick();
+</script>
+</body></html>
